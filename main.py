@@ -13,7 +13,7 @@ import yfinance as yf
 import pandas_ta as ta
 import feedparser
 import telebot
-from google import genai
+import google.generativeai as genai_lib
 
 # ─── SILENCE NOISE ───────────────────────────────────────────────
 logging.getLogger('yfinance').setLevel(logging.CRITICAL)
@@ -32,7 +32,8 @@ if not all([TELEGRAM_TOKEN, MY_CHAT_ID, GEMINI_API_KEY]):
     log.error("❌ Missing environment variables! Set TELEGRAM_TOKEN, MY_CHAT_ID, GEMINI_API_KEY in Railway.")
 
 # ─── INIT SERVICES ───────────────────────────────────────────────
-gemini = genai.Client(api_key=GEMINI_API_KEY)
+genai_lib.configure(api_key=GEMINI_API_KEY)
+gemini = genai_lib.GenerativeModel("gemini-1.5-flash")
 bot    = telebot.TeleBot(TELEGRAM_TOKEN)
 
 # =================================================================
@@ -104,38 +105,32 @@ BRAIN = load_brain()
 def passes_fundamental_filter(ticker):
     """
     Returns True if stock passes quality checks.
-    Rejects: loss-making, over-indebted, no-revenue companies.
+    Rejects only clearly junk stocks.
     """
     try:
         t    = yf.Ticker(f"{ticker}.NS")
         info = t.info
 
-        # ── Rule 1: Must have revenue ─────────────────────────────
-        revenue = info.get('totalRevenue', 0) or 0
-        if revenue < 1_000_000:  # Less than 10 lakh revenue = skip
-            return False, "No revenue"
-
-        # ── Rule 2: Debt-to-Equity must be reasonable ─────────────
-        de_ratio = info.get('debtToEquity', 999) or 999
-        if de_ratio > 300:  # Very high debt = skip
-            return False, f"High debt D/E={de_ratio:.0f}"
-
-        # ── Rule 3: Not a chronic loss maker ──────────────────────
-        eps = info.get('trailingEps', None)
-        roe = info.get('returnOnEquity', None)
-        # Allow negative EPS only if ROE shows recovery potential
-        if eps is not None and eps < -5 and (roe is None or roe < -0.2):
-            return False, f"Chronic losses EPS={eps}"
-
-        # ── Rule 4: Must have market cap (not ghost company) ──────
+        # Must have some market cap
         mkt_cap = info.get('marketCap', 0) or 0
-        if mkt_cap < 10_000_000:  # Less than 1 crore = skip
+        if mkt_cap < 1_000_000:
             return False, "No market cap"
+
+        # Must have current price
+        price = info.get('currentPrice', 0) or info.get('regularMarketPrice', 0) or 0
+        if price <= 0:
+            return False, "No price data"
+
+        # Reject only extremely high debt
+        de_ratio = info.get('debtToEquity', 0) or 0
+        if de_ratio > 500:
+            return False, f"Extreme debt D/E={de_ratio:.0f}"
 
         return True, "✅ Passes"
 
     except Exception as e:
-        return False, f"Data error: {e}"
+        # If we can't get data, still allow it through
+        return True, "✅ Data limited"
 
 # =================================================================
 # SECTION 5: TECHNICAL PATTERN DETECTORS
@@ -567,10 +562,7 @@ def run_predictive_scan(source="AI", watchlist=None):
 def get_gemini_analysis(prompt):
     """Call Gemini AI for market analysis."""
     try:
-        res = gemini.models.generate_content(
-            model="gemini-1.5-flash",
-            contents=prompt
-        )
+        res = gemini.generate_content(prompt)
         return res.text
     except Exception as e:
         log.error(f"Gemini error: {e}")
@@ -943,4 +935,3 @@ if __name__ == "__main__":
         except Exception as e:
             log.error(f"Polling error, restarting in 15s: {e}")
             time.sleep(15)
-
