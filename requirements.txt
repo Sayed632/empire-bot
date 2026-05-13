@@ -1,1 +1,7 @@
-
+pyTelegramBotAPI==4.18.0
+yfinance==0.2.38
+pandas_ta==0.3.14b0
+feedparser==6.0.11
+google-genai==0.8.0
+pandas==2.2.2
+requests==2.31.0
