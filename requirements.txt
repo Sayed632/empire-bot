@@ -1,9 +1,8 @@
-pyTelegramBotAPI==4.18.0
-yfinance==0.2.54
-pandas==2.2.2
+pyTelegramBotAPI
+yfinance
+pandas
 pandas_ta
 google-generativeai
 feedparser
 requests
 lxml
-psycopg2-binary
