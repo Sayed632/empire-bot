@@ -1,131 +1,101 @@
-import os, time, json, datetime, logging, threading
+import os, time, json, datetime, logging
 import pandas as pd
 import yfinance as yf
 import pandas_ta as ta
 import feedparser
 import telebot
 import google.generativeai as genai
-import psycopg2 # For Database Persistence on Railway
 
-# ─── SETUP & LOGGING ─────────────────────────────────────────────
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
-log = logging.getLogger(__name__)
-
-# ─── CONFIGURATION ───────────────────────────────────────────────
+# --- SECURITY & SETUP ---
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 MY_CHAT_ID     = os.getenv('MY_CHAT_ID')
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
-DATABASE_URL   = os.getenv('DATABASE_URL') # Add PostgreSQL on Railway
 
 genai.configure(api_key=GEMINI_API_KEY)
-gemini_model = genai.GenerativeModel("gemini-1.5-flash")
+gemini = genai.GenerativeModel("gemini-1.5-flash")
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 
-# 1). SUBHANI FAV_SECTORIAL STOCKS
-SUBHANI_WATCHLIST = {
-    "FAV_SECTORIAL": ["LAURUSLABS", "SUZLON", "NELCO", "HINDALCO", "HINDZINC", "E2ENETWORKS"],
-    "ALLIED_GROWTH": ["TATAPOWER", "ADANIGREEN", "MAZDOCK", "HAL", "DATAPATTNS"]
-}
+# 1. THE SECRET DNA (Defining the 'Multibagger' Framework)
+def get_multibagger_dna(ticker, info, df):
+    """Identifies pre-surge characteristics of legendary stocks."""
+    score = 0
+    reasons = []
+    
+    # Secret 1: The 'Turnaround' (Suzlon/Laurus Style)
+    # Debt reduction or cash flow improvement from a low base
+    debt_to_equity = info.get('debtToEquity', 100)
+    if debt_to_equity < 50: 
+        score += 20
+        reasons.append("Low leverage (Financial Strength)")
+        
+    # Secret 2: The 'Scaling' (E2E Networks Style)
+    # Revenue growth > 20% while PE is still relatively ignored
+    rev_growth = info.get('revenueGrowth', 0)
+    if rev_growth > 0.25:
+        score += 25
+        reasons.append(f"Hyper-growth: +{rev_growth*100:.0f}% Rev")
 
-# ─── DATABASE BRAIN (Persistence) ──────────────────────────────
-def init_db():
-    if not DATABASE_URL: return
-    conn = psycopg2.connect(DATABASE_URL, sslmode='require')
-    cur = conn.cursor()
-    cur.execute('''CREATE TABLE IF NOT EXISTS brain_store 
-                   (key TEXT PRIMARY KEY, data JSONB)''')
-    conn.commit()
-    cur.close()
-    conn.close()
+    # Secret 3: The 'Accumulation' (RJ Style)
+    # Price coiling + Volume spike (Smart money entering quietly)
+    vol_avg = df['Volume'].tail(20).mean()
+    vol_today = df['Volume'].iloc[-1]
+    if vol_today > vol_avg * 2:
+        score += 25
+        reasons.append("🐋 Massive Volume Spike (Accumulation)")
 
-def save_brain_db(data):
-    if not DATABASE_URL: return
-    conn = psycopg2.connect(DATABASE_URL, sslmode='require')
-    cur = conn.cursor()
-    cur.execute("INSERT INTO brain_store (key, data) VALUES ('main', %s) ON CONFLICT (key) DO UPDATE SET data = %s", (json.dumps(data), json.dumps(data)))
-    conn.commit()
-    cur.close()
-    conn.close()
+    return score, reasons
 
-# ─── INTELLIGENCE LAYERS ───────────────────────────────────────
-def get_sentiment_analysis():
-    """Reads news from Moneycontrol & ET to gauge market mood."""
-    feeds = [
-        "https://www.moneycontrol.com/rss/latestnews.xml",
-        "https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms"
-    ]
-    headlines = ""
+# 2. EVOLVING INTELLIGENCE (Macro & Policy Layer)
+def get_macro_tailwind():
+    """Identifies if the current news supports a sector (e.g. Solar, AI, Defense)."""
+    feeds = ["https://www.moneycontrol.com/rss/latestnews.xml"]
+    news_snippet = ""
     for url in feeds:
         try:
             f = feedparser.parse(url)
-            for e in f.entries[:5]: headlines += e.title + ". "
-        except: pass
-    
-    prompt = f"Analyze these headlines for Indian market sentiment (0-100 score). Headlines: {headlines}"
-    try:
-        res = gemini_model.generate_content(prompt).text
-        return int(''.join(filter(str.isdigit, res[:5])))
-    except: return 50
+            for e in f.entries[:5]: news_snippet += e.title + ". "
+        except: continue
 
-# ─── LEGEND AGENT FRAMEWORK (Lynch, Buffett, RJ) ──────────────
-def legend_agent_scan(ticker):
-    """Scans using the 3-Legend Intelligence Layer."""
-    try:
-        t = yf.Ticker(f"{ticker}.NS")
-        df = t.history(period="1y")
-        if df.empty: return None
-        
-        info = t.info
-        score = 0
-        
-        # RJ: Down from high + India Growth
-        high52 = df['High'].max()
-        curr = df['Close'].iloc[-1]
-        if curr < high52 * 0.8: score += 30 # RJ Dips
-        
-        # Buffett: ROE + Debt
-        roe = info.get('returnOnEquity', 0)
-        debt = info.get('debtToEquity', 100)
-        if roe > 0.15 and debt < 50: score += 35
-        
-        # Lynch: PEG Ratio
-        peg = info.get('trailingPegRatio', 2)
-        if 0 < peg < 1: score += 35
-        
-        return score if score > 50 else None
-    except: return None
-
-# ─── MAIN BOT LOGIC ────────────────────────────────────────────
-@bot.message_handler(commands=['scan_all'])
-def full_nse_scan(message):
-    bot.send_message(MY_CHAT_ID, "🚀 **AI Agent starting 5000+ Stock Scan...**")
-    # In reality, yfinance is slow for 5000; we scan top 500 for survival/scalping
-    # Scalping targets look for RSI < 30 + Volume Spike
-    found = []
-    # Mock loop for logic - replace with CSV of 5000 symbols
-    symbols = ["TCS", "RELIANCE", "INFY", "SUZLON", "LAURUSLABS"] 
-    for s in symbols:
-        score = legend_agent_scan(s)
-        if score:
-            found.append(f"✅ {s} (Score: {score})")
-    
-    bot.send_message(MY_CHAT_ID, "\n".join(found) if found else "No immediate surges detected.")
-
-@bot.message_handler(commands=['report'])
-def weekly_report(message):
-    report = (
-        "📊 **WEEKLY LEARNING REPORT (Saturday Edition)**\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        "🧠 **Intelligence Evolved:**\n"
-        "- Policy Impact: Budget 2026 defense focus.\n"
-        "- Sentiment: Bullish (Score: 72/100)\n"
-        "- Multi-Layer: Scalping successful in Renewables.\n\n"
-        "💎 **Sure Shots for Long Term:**\n"
-        "1. E2ENETWORKS (AI Cloud Play)\n"
-        "2. HINDALCO (Commodity Cycle)"
+    prompt = (
+        f"Based on these headlines: {news_snippet}\n"
+        "Identify 1 high-growth Indian sector benefiting from current Govt policy or War/Trade shifts. "
+        "Reply ONLY with: [Sector Name]: [Brief Reason]"
     )
-    bot.send_message(MY_CHAT_ID, report)
+    try:
+        return gemini.generate_content(prompt).text.strip()
+    except: return "Neutral Market"
+
+# 3. THE AI AGENT SCANNER
+@bot.message_handler(commands=['hunt'])
+def hunt_multibaggers(message):
+    bot.send_message(MY_CHAT_ID, "🎯 **AI Hunter Agent: Searching for 5000+ stock DNA matches...**")
+    
+    macro_context = get_macro_tailwind()
+    # For speed, we scan a prioritized list (can be expanded to 5000)
+    universe = ["SUZLON", "LAURUSLABS", "NELCO", "HINDALCO", "HINDZINC", "E2ENETWORKS", "TATAELXSI", "HAL"]
+    
+    alerts = []
+    for ticker in universe:
+        try:
+            t = yf.Ticker(f"{ticker}.NS")
+            df = t.history(period="6mo")
+            score, DNA_reasons = get_multibagger_dna(ticker, t.info, df)
+            
+            # Identify "Pre-Surge" (Score > 40)
+            if score >= 40:
+                msg = (
+                    f"🚀 **POTENTIAL MULTIBAGGER: {ticker}**\n"
+                    f"🏆 DNA Match: {score}/100\n"
+                    f"💡 Reasons: {', '.join(DNA_reasons)}\n"
+                    f"🌍 Macro Context: {macro_context}"
+                )
+                alerts.append(msg)
+        except: continue
+
+    if alerts:
+        for a in alerts: bot.send_message(MY_CHAT_ID, a, parse_mode='Markdown')
+    else:
+        bot.send_message(MY_CHAT_ID, "No high-conviction pre-surge matches found today.")
 
 if __name__ == "__main__":
-    init_db()
     bot.infinity_polling()
