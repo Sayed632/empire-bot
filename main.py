@@ -10,7 +10,7 @@ import feedparser
 import telebot
 import google.generativeai as genai
 import matplotlib
-# Use non-interactive Agg backend to ensure it runs safely inside headless GitHub Actions
+# Force matplotlib to use a non-interactive backend for headless GitHub servers
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
@@ -73,11 +73,11 @@ def get_macro_tailwind():
 # 3. SHAREHOLDING ENGINE (Generates & Saves Donut Chart Image)
 def generate_shareholding_chart(ticker, info):
     """Parses structural shareholding metrics and renders a clean donut chart vector."""
-    # Pull percentages from yfinance info dictionary falling back on global institutional estimations
+    # Pull percentages from yfinance info dictionary
     promoter_held = info.get('heldPercentInsiders', 0.50) * 100
     inst_held = info.get('heldPercentInstitutions', 0.25) * 100
     
-    # Quick fallback defaults if values are missing or zero
+    # Fallback defaults if values are missing or zero
     if promoter_held == 0 and inst_held == 0:
         promoter_held, inst_held = 50.95, 32.31
         
@@ -114,12 +114,11 @@ def generate_shareholding_chart(ticker, info):
     plt.close()
     return image_filename
 
-# 4. THE AI AGENT SCANNER WITH VISUAL PIPELINES
-@bot.message_handler(commands=['hunt'])
-def hunt_multibaggers(message):
-    bot.send_message(MY_CHAT_ID, "🎯 **AI Hunter Agent: Searching for 5000+ stock DNA matches...**")
-    
+# 4. THE AI AGENT SCANNER ENGINE
+def hunt_multibaggers():
+    print("🎯 Starting AI Hunter Agent market scan...")
     macro_context = get_macro_tailwind()
+    
     # Prioritized processing list
     universe = ["SUZLON", "LAURUSLABS", "NELCO", "HINDALCO", "HINDZINC", "E2ENETWORKS", "TATAELXSI", "HAL"]
     
@@ -151,18 +150,24 @@ def hunt_multibaggers(message):
                 # Dispatch image containing textual caption via Telegram
                 with open(chart_img, 'rb') as photo:
                     bot.send_photo(MY_CHAT_ID, photo, caption=msg, parse_mode='Markdown')
+                print(f"✅ Alert sent for {ticker}")
                 
                 # Delete temporary disk image asset to optimize environment storage
                 if os.path.exists(chart_img):
                     os.remove(chart_img)
                     
         except Exception as e:
-            logging.error(f"Error handling asset tracking operations on ticker {ticker}: {str(e)}")
+            print(f"Error handling operations on ticker {ticker}: {str(e)}")
             continue
 
     if not hits_found:
         bot.send_message(MY_CHAT_ID, "No high-conviction pre-surge matches found today.")
+        print("📁 Scan finished with 0 alerts sent.")
 
+# 5. AUTOMATED EXECUTION ENTRY POINT
 if __name__ == "__main__":
-    bot.infinity_polling()
+    print("🚀 Triggering automated market hunting sequence...")
+    # Directly run the code function without waiting or infinite loops
+    hunt_multibaggers()
+    print("✅ Hunting complete. Powering down GitHub Action container smoothly.")
     
