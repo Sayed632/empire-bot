@@ -5,7 +5,6 @@ import datetime
 import logging
 import pandas as pd
 import yfinance as yf
-import pandas_ta as ta
 import feedparser
 import telebot
 import google.generativeai as genai
@@ -167,7 +166,6 @@ def hunt_multibaggers():
 # 5. AUTOMATED EXECUTION ENTRY POINT
 if __name__ == "__main__":
     print("🚀 Triggering automated market hunting sequence...")
-    # Directly run the code function without waiting or infinite loops
     hunt_multibaggers()
     print("✅ Hunting complete. Powering down GitHub Action container smoothly.")
     
