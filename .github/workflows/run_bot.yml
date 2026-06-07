@@ -1,11 +1,9 @@
-```yaml
 name: Run Empire Bot Daily
 
 on:
   schedule:
-    # Runs at 04:15 UTC (9:45 AM Indian Standard Time) Monday to Friday
     - cron: '15 4 * * 1-5'
-  workflow_dispatch: # Allows you to click a button and run it manually anytime!
+  workflow_dispatch:
 
 jobs:
   run-bot:
@@ -33,3 +31,4 @@ jobs:
         SCREENER_PASSWORD: ${{ secrets.SCREENER_PASSWORD }}
         TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
       run: python main.py
+      
